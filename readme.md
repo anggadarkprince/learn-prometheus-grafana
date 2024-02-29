@@ -15,10 +15,12 @@
 - run `./node_exporter` or run on the background `nohup ./node_exporter > node_exporter.txt 2>&1 &`
 - Node exporer by default run on `localhost:9100`
 - On prometheus server edit `prometheus.yml`
+  ```ini
   scrape_configs:
   - job_name: "node_exporter"
     static_configs:
       - targets: ["server1:9100", "server2:9100"]
+  ```
 
 ### MySQL exporter
 - Download & extract mysql exporter on target machine
@@ -30,7 +32,7 @@
 - Register exporter as service
   1. Create group `sudo groupadd --system mysql_exporter`
   2. Create user and join the group `sudo useradd -s /sbin/nologin --system -g mysql_exporter mysql_exporter`
-  3. Create exporter config file `sudo vi /etc/.mysqld_exporter.cnf`
+  3. Create exporter config file `sudo nano /etc/.mysqld_exporter.cnf`
      ```ini
      [client] 
      user=exporter 
@@ -77,13 +79,51 @@
 - Configure prometheus `sudo nano /etc/prometheus/prometheus.yml`
   ```yml
   - job_name: mysql_server1
-  static_configs: 
-   - targets: ['<Machine_IP>:9104'] 
-     labels: 
-       alias: db1
+    static_configs: 
+    - targets: ['<Machine_IP>:9104'] 
+      labels: 
+        alias: db1
   ```
 - Reload prometheus `sudo systemctl restart prometheus`
 
+### Nginx exporter
+- Download nginx-prometheus-exporter `wget https://github.com/nginxinc/nginx-prometheus-exporter/releases/download/v1.1.0/nginx-prometheus-exporter_1.1.0_linux_amd64.tar.gz`
+- Extract `sudo tar -zxf nginx-prometheus-exporter_1.1.0_linux_amd64.tar.gz`
+- Create user for the exporter `sudo useradd --system --no-create-home --shell /bin/false nginx-exporter`
+- Move `sudo mv nginx-prometheus-exporter /usr/local/bin/`
+- Set ownership `sudo chown nginx-exporter:nginx-exporter /usr/local/bin/nginx-prometheus-exporter`
+- Create systemd unit config `sudo nano /etc/systemd/system/nginx-exporter.service`
+  ```ini 
+  [Unit]
+  Description=Nginx Exporter
+  Wants=network-online.target
+  After=network-online.target
+
+  StartLimitIntervalSec=0
+
+  [Service]
+  User=nginx-exporter
+  Group=nginx-exporter
+  Type=simple
+  Restart=on-failure
+  RestartSec=5s
+  ExecStart=/usr/local/bin/nginx-prometheus-exporter \
+    --nginx.scrape-uri=http://<Nginx_IP>/basic-status
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+- Enable service `sudo systemctl enable nginx-exporter`
+- Start service `sudo systemctl start nginx-exporter`
+- Configure prometheus `sudo nano /etc/prometheus/prometheus.yml`
+  ```yml
+  - job_name: "nginx"
+    static_configs:
+      - targets: ["<Machine_IP>:9113"]
+        labels:
+          alias: "Nginx"
+  ```
+- Reload prometheus `sudo systemctl restart prometheus`
 
 ## Setup grafana
 - Install the prerequisite `sudo apt-get install -y apt-transport-https software-properties-common wget`
