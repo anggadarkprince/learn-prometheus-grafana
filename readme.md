@@ -1,4 +1,3 @@
-
 ## Download prometheus
 - Download prometheus `https://prometheus.io/download/`
 - Example version `wget https://github.com/prometheus/prometheus/releases/download/v2.49.1/prometheus-2.49.1.linux-amd64.tar.gz`
@@ -87,6 +86,22 @@
 - Reload prometheus `sudo systemctl restart prometheus`
 
 ### Nginx exporter
+- Create nginx status config `nano /etc/nginx/sites-available/status.conf`
+  ```nginx
+  server {
+        listen 80;
+        server_name <ip-machine>;
+        location = /basic-status {
+                allow 127.0.0.1;
+                allow <ip-allowed-to-access>;
+                deny all;
+                stub_status;
+        }
+  }
+  ```
+- Enable status site `sudo ln -s /etc/nginx/sites-available/status.conf /etc/nginx/sites-enabled/status.conf`
+- Reload configuration `sudo service nginx reload`
+- Make sure the status page is available from the other machine `curl http://<ip-nginx>/basic-status`
 - Download nginx-prometheus-exporter `wget https://github.com/nginxinc/nginx-prometheus-exporter/releases/download/v1.1.0/nginx-prometheus-exporter_1.1.0_linux_amd64.tar.gz`
 - Extract `sudo tar -zxf nginx-prometheus-exporter_1.1.0_linux_amd64.tar.gz`
 - Create user for the exporter `sudo useradd --system --no-create-home --shell /bin/false nginx-exporter`
@@ -125,6 +140,70 @@
   ```
 - Reload prometheus `sudo systemctl restart prometheus`
 
+### PHP-FPM exporter
+- PHP-FPM exporter version: https://github.com/Lusitaniae/phpfpm_exporter/tree/master
+- Edit fpm config, enable status `sudo nano /etc/php/8.1/fpm/pool.d/www.conf`
+  ```ini
+  pm.status_path = /status
+  ping.path = /ping
+  ```
+- Enable http to access php-fpm status
+  ```nginx
+  server {
+        listen 80;
+        server_name <ip-machine>;
+
+        location ~ ^/(status|ping)$ {
+                access_log off;
+                allow 127.0.0.1;
+                allow <ip-allowed-to-access>;
+                deny all;
+                include fastcgi_params;
+                fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
+                fastcgi_index /status;
+                fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        }
+  }
+  ```
+- Enable status site `sudo ln -s /etc/nginx/sites-available/status.conf /etc/nginx/sites-enabled/status.conf`
+- Reload configuration `sudo service nginx reload`
+- Make sure the status page is available from the other machine `curl http://<ip-target>/status` and `curl http://<ip-target>/ping`
+- Download exporter `wget https://github.com/Lusitaniae/phpfpm_exporter/releases/download/v0.6.0/phpfpm_exporter-0.6.0.linux-amd64.tar.gz`
+- Extract `sudo tar -zxf phpfpm_exporter-0.6.0.linux-amd64.tar.gz`
+- Create user for the exporter `sudo useradd --system --no-create-home --shell /bin/false php-fpm-exporter`
+- Move to location`sudo mv phpfpm_exporter /usr/local/bin/`
+- Set ownership `sudo chown php-fpm-exporter:php-fpm-exporter /usr/local/bin/phpfpm_exporter`
+- Download php opcache exporter `wget https://github.com/Lusitaniae/phpfpm_exporter/blob/master/contrib/php_opcache_exporter.php`
+- Move to location `mv php_opcache_exporter.php /etc/php-exporter/`
+- Set ownership `sudo chown php-fpm-exporter:php-fpm-exporter /etc/php-exporter -R`
+- Create systemd unit config `sudo nano /etc/systemd/system/php-fpm-exporter.service`
+  ```ini 
+  [Unit]
+  Description = PHP-FPM Prometheus Exporter
+
+  [Service]
+  SyslogIdentifier = phpfpm_exporter
+  ExecStart = /usr/local/bin/phpfpm_exporter \
+        --phpfpm.socket-paths="/run/php/php8.1-fpm.sock" \
+        --phpfpm.script-collector-paths="/etc/php-exporter/phpfpm_opcache_exporter.php" \
+        --phpfpm.status-path="/status" \
+        --web.listen-address=":9253"
+
+  [Install]
+  WantedBy = multi-user.target
+  ```
+- Enable service `sudo systemctl enable php-fpm-exporter`
+- Start service `sudo systemctl start php-fpm-exporter`
+- Configure prometheus `sudo nano /etc/prometheus/prometheus.yml`
+  ```yml
+  - job_name: "php-fpm"
+    static_configs:
+      - targets: ["<Machine_IP>:9253"]
+        labels:
+          alias: "PHP-FPM"
+  ```
+- Reload prometheus `sudo systemctl restart prometheus`
+  
 ## Setup grafana
 - Install the prerequisite `sudo apt-get install -y apt-transport-https software-properties-common wget`
 - Import the GPG
