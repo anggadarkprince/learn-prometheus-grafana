@@ -103,7 +103,7 @@
 - Reload configuration `sudo service nginx reload`
 - Make sure the status page is available from the other machine `curl http://<ip-nginx>/basic-status`
 - Download nginx-prometheus-exporter `wget https://github.com/nginxinc/nginx-prometheus-exporter/releases/download/v1.1.0/nginx-prometheus-exporter_1.1.0_linux_amd64.tar.gz`
-- Extract `sudo tar -zxf nginx-prometheus-exporter_1.1.0_linux_amd64.tar.gz`
+- Extract `sudo tar -xvzf nginx-prometheus-exporter_1.1.0_linux_amd64.tar.gz`
 - Create user for the exporter `sudo useradd --system --no-create-home --shell /bin/false nginx-exporter`
 - Move `sudo mv nginx-prometheus-exporter /usr/local/bin/`
 - Set ownership `sudo chown nginx-exporter:nginx-exporter /usr/local/bin/nginx-prometheus-exporter`
@@ -169,7 +169,7 @@
 - Reload configuration `sudo service nginx reload`
 - Make sure the status page is available from the other machine `curl http://<ip-target>/status` and `curl http://<ip-target>/ping`
 - Download exporter `wget https://github.com/Lusitaniae/phpfpm_exporter/releases/download/v0.6.0/phpfpm_exporter-0.6.0.linux-amd64.tar.gz`
-- Extract `sudo tar -zxf phpfpm_exporter-0.6.0.linux-amd64.tar.gz`
+- Extract `sudo tar -xvzf phpfpm_exporter-0.6.0.linux-amd64.tar.gz`
 - Create user for the exporter `sudo useradd --system --no-create-home --shell /bin/false php-fpm-exporter`
 - Move to location`sudo mv phpfpm_exporter /usr/local/bin/`
 - Set ownership `sudo chown php-fpm-exporter:php-fpm-exporter /usr/local/bin/phpfpm_exporter`
@@ -184,10 +184,10 @@
   [Service]
   SyslogIdentifier = phpfpm_exporter
   ExecStart = /usr/local/bin/phpfpm_exporter \
-        --phpfpm.socket-paths="/run/php/php8.1-fpm.sock" \
-        --phpfpm.script-collector-paths="/etc/php-exporter/phpfpm_opcache_exporter.php" \
-        --phpfpm.status-path="/status" \
-        --web.listen-address=":9253"
+    --phpfpm.socket-paths="/run/php/php8.1-fpm.sock" \
+    --phpfpm.script-collector-paths="/etc/php-exporter/phpfpm_opcache_exporter.php" \
+    --phpfpm.status-path="/status" \
+    --web.listen-address=":9253"
 
   [Install]
   WantedBy = multi-user.target
@@ -203,7 +203,46 @@
           alias: "PHP-FPM"
   ```
 - Reload prometheus `sudo systemctl restart prometheus`
-  
+
+## Alert Manager
+- Download alert manager `wget https://github.com/prometheus/alertmanager/releases/download/v0.27.0/alertmanager-0.27.0.linux-amd64.tar.gz`
+- Extract `sudo tar -xvzf alertmanager-0.27.0.linux-amd64.tar.gz` and `cd alertmanager-0.27.0.linux-amd64`
+- Create user group `sudo groupadd -f alert-manager`
+- Create user for the exporter `sudo useradd -g alertmanager --system --no-create-home --shell /bin/false alert-manager`
+- Move alertmanager binary `sudo mv alertmanager /usr/local/bin/`
+- Move alermanager tool binary `sudo mv amtool /usr/local/bin/`
+- Change ownership `sudo chown alert-manager:alert-manager /usr/local/bin/alertmanager`
+- `sudo chown alert-manager:alert-manager /usr/local/bin/amtool`
+- Create configuration directory `sudo mkdir -p /etc/alertmanager`
+- Move alertmanager config `sudo mv alertmanager.yml /etc/alertmanager/alertmanager.yml`
+- Add permission to it `sudo chown alert-manager:alert-manager /etc/alertmanager -R`
+- Create storage directory `sudo mkdir /var/lib/alertmanager`
+- Add permission to it `sudo chown alert-manager:alert-manager /var/lib/alertmanager`
+- Create systemd unit config `sudo nano /usr/lib/systemd/system/alertmanager.service`
+  ```ini 
+  [Unit]
+  Description=AlertManager
+  Wants=network-online.target
+  After=network-online.target
+
+  [Service]
+  User=alert-manager
+  Group=alert-manager
+  Type=simple
+  ExecStart=/usr/bin/alertmanager \
+    --config.file /etc/alertmanager/alertmanager.yml \
+    --storage.path /var/lib/alertmanager/ \
+    --cluster.advertise-address=0.0.0.0:9093
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+- Add permission `sudo chmod 664 /usr/lib/systemd/system/alertmanager.service`
+- Enable to start on boot `sudo systemctl enable alertmanager.service`
+- Reloaad daemon `sudo systemctl daemon-reload`
+- Start the service `sudo systemctl start alertmanager`
+
+
 ## Setup grafana
 - Install the prerequisite `sudo apt-get install -y apt-transport-https software-properties-common wget`
 - Import the GPG
@@ -221,4 +260,4 @@
 - Add prometheus data source, from sidebar go to Configuration - Data Sources - Add data source - choose Prometheus - enter http://localhost:9090 and click Save & Test
 - Import dashboard https://grafana.com/grafana/dashboards search for “node exporter” to find available dashboards. Copy the dashboard ID
 - Click “Create” in the left sidebar to create a new dashboard. Click "Import" and paste the dashboard ID you copied earlier.
-    Load the dashboard and select the Prometheus data source. Click "Import"
+- Load the dashboard and select the Prometheus data source. Click "Import"
