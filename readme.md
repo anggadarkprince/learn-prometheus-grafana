@@ -10,9 +10,42 @@
 
 ## Exporter
 ### Node exporter
-- Download & extract node exporter on target machine
-- run `./node_exporter` or run on the background `nohup ./node_exporter > node_exporter.txt 2>&1 &`
+- Download node exporter `wget https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz`
+- Extract `sudo tar -xvzf node_exporter-1.7.0.linux-amd64.tar.gz` and `cd node_exporter-1.7.0.linux-amd64`
+- Run `./node_exporter` or run on the background `nohup ./node_exporter > node_exporter.txt 2>&1 &`
 - Node exporer by default run on `localhost:9100`
+- To make as a service, do the following things
+- Create user group `sudo groupadd --system node-exporter`
+- Create user for the exporter `sudo useradd --system --no-create-home --shell /bin/false -g node-exporter node-exporter`
+- Move exporter binary `sudo mv node_exporter /usr/local/bin/`
+- Change ownership `sudo chown node-exporter:node-exporter /usr/local/bin/node_exporter`
+- Create systemd unit config `sudo nano /usr/lib/systemd/system/node-exporter.service`
+  ```ini
+  [Unit]
+  Description=Node Exporter
+  Wants=network-online.target
+  After=network-online.target
+  StartLimitIntervalSec=500
+  StartLimitBurst=5
+
+  [Service]
+  User=node-exporter
+  Group=node-exporter
+  Type=simple
+  Restart=on-failure
+  RestartSec=5s
+  ExecStart=/usr/local/bin/node_exporter \
+    --collector.logind \
+    --collector.systemd \
+    --collector.processes
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+- Set file permission `sudo chmod 664 /usr/lib/systemd/system/node-exporter.service`
+- Enable to start on boot `sudo systemctl enable node-exporter.service`
+- Reload daemon `sudo systemctl daemon-reload`
+- Start the service `sudo systemctl start node-exporter`
 - On prometheus server edit `prometheus.yml`
   ```ini
   scrape_configs:
@@ -210,7 +243,7 @@
 - Create user group `sudo groupadd -f alert-manager`
 - Create user for the exporter `sudo useradd -g alertmanager --system --no-create-home --shell /bin/false alert-manager`
 - Move alertmanager binary `sudo mv alertmanager /usr/local/bin/`
-- Move alermanager tool binary `sudo mv amtool /usr/local/bin/`
+- Move alertmanager tool binary `sudo mv amtool /usr/local/bin/`
 - Change ownership `sudo chown alert-manager:alert-manager /usr/local/bin/alertmanager`
 - `sudo chown alert-manager:alert-manager /usr/local/bin/amtool`
 - Create configuration directory `sudo mkdir -p /etc/alertmanager`
